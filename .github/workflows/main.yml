@@ -18,36 +18,47 @@ jobs:
           from email.mime.text import MIMEText
           from datetime import datetime
 
-          url = "https://www.4396200.com/sub8_1.s.html?cate_code=100100"
-          req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-          html = urllib.request.urlopen(req).read().decode("euc-kr", errors="ignore")
-
           today = datetime.now().strftime("%y.%m.%d")
-          pattern = r'밥니다.*?(?:두산|현대|볼보|굴삭기).*?' + re.escape(today)
-          matches = re.findall(r'<tr[^>]*>.*?</tr>', html, re.DOTALL)
+
+          urls = [
+            "https://www.4396200.com/sub8_1.s.html?cate_code=100100",
+            "https://www.4396200.com/sub8_1.s.html?cate_code=100101",
+            "https://www.4396200.com/sub8_1.s.html?cate_code=100102",
+            "https://www.4396200.com/sub8_1.s.html?cate_code=100103",
+            "https://www.4396200.com/sub8_1.s.html?cate_code=100104",
+          ]
 
           results = []
-          for row in matches:
-              if today in row and "전남" in row:
+          for url in urls:
+            try:
+              req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+              html = urllib.request.urlopen(req).read().decode("euc-kr", errors="ignore")
+              rows = re.findall(r'<tr[^>]*>.*?</tr>', html, re.DOTALL)
+              for row in rows:
+                if today in row and "전남" in row:
                   text = re.sub(r'<[^>]+>', ' ', row)
                   text = re.sub(r'\s+', ' ', text).strip()
-                  if text:
-                      results.append(text)
+                  if len(text) > 10:
+                    results.append(text)
+            except:
+              pass
+
+          results = list(dict.fromkeys(results))
 
           if results:
-              body = f"[전남 굴착기 신규 매물 - {today}]\n\n"
-              body += "\n\n".join(results[:20])
-              body += "\n\n확인: https://www.4396200.com/sub8_1.s.html?cate_code=100100"
+            body = f"[전남 굴착기 신규 매물 - {today}]\n\n"
+            body += "\n\n".join(results[:30])
+            body += "\n\n확인: https://www.4396200.com/sub8_1.s.html?cate_code=100100"
 
-              msg = MIMEText(body, 'plain', 'utf-8')
-              msg['Subject'] = f"[그린중기] 전남 굴착기 신규매물 {len(results)}건"
-              msg['From'] = "${{ secrets.GMAIL_USER }}"
-              msg['To'] = "${{ secrets.GMAIL_USER }}"
+            msg = MIMEText(body, 'plain', 'utf-8')
+            msg['Subject'] = f"[그린중기] 전남 굴착기 신규매물 {len(results)}건"
+            msg['From'] = "${{ secrets.GMAIL_USER }}"
+            msg['To'] = "${{ secrets.GMAIL_USER }}"
 
-              with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
-                  s.login("${{ secrets.GMAIL_USER }}", "${{ secrets.GMAIL_PASS }}")
-                  s.send_message(msg)
-              print(f"알림 발송 완료: {len(results)}건")
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+              s.login("${{ secrets.GMAIL_USER }}", "${{ secrets.GMAIL_PASS }}")
+              s.send_message(msg)
+            print(f"알림 발송 완료: {len(results)}건")
           else:
-              print(f"신규 매물 없음 ({today} 전남)")
+            print(f"신규 매물 없음 ({today} 전남)")
           EOF
