@@ -1,87 +1,20 @@
 /**
- * 그린중기매매상사 굴착기 매물 자동 수집 및 카카오톡 발송 스크립트
- * 조건: 두산·현대·볼보 / 연식 제한 / 최근 7일
- * 토큰 자동 갱신 기능 포함
+ * 그린중기매매상사 굴착기 매물 자동 수집 및 카카오톡 발송
+ * GitHub Actions 환경용 (환경변수로 토큰 관리)
  */
 
 const axios = require('axios');
 const cheerio = require('cheerio');
-const fs = require('fs');
-const path = require('path');
 
-// 토큰 파일 경로 (스크립트와 같은 폴더)
-const TOKEN_FILE = path.join(__dirname, 'kakao_token.json');
+// 환경변수에서 토큰 읽기 (GitHub Actions Secrets)
+const KAKAO_TOKEN = process.env.KAKAO_ACCESS_TOKEN;
+const REST_API_KEY = process.env.REST_API_KEY || '2c0f1aa6acf2b9f2e2eb50fbeac8a0f6';
 
-// REST API 키
-const REST_API_KEY = '2c0f1aa6acf2b9f2e2eb50fbeac8a0f6';
-
-// 토큰 파일 읽기/쓰기
-function loadToken() {
-  try {
-    return JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
-  } catch {
-    return null;
-  }
+if (!KAKAO_TOKEN) {
+  console.error('KAKAO_ACCESS_TOKEN 환경변수가 없습니다.');
+  process.exit(1);
 }
 
-function saveToken(data) {
-  fs.writeFileSync(TOKEN_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
-
-// 액세스 토큰 갱신
-async function refreshAccessToken(refreshToken) {
-  console.log('액세스 토큰 갱신 중...');
-  const res = await axios.post(
-    'https://kauth.kakao.com/oauth/token',
-    new URLSearchParams({
-      grant_type: 'refresh_token',
-      client_id: REST_API_KEY,
-      refresh_token: refreshToken,
-    }).toString(),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-  );
-  return res.data;
-}
-
-// 유효한 액세스 토큰 가져오기 (5시간 경과 시 자동 갱신)
-async function getValidToken() {
-  let token = loadToken();
-
-  if (!token) {
-    // 최초 1회: 토큰 파일 생성
-    token = {
-      access_token: 'y2pgx4JB8qdx-PPf7_jhI_MPv3IyIyyNAAAAAQoNG5oAAAGei-4Fc-AsyCcGfplL',
-      refresh_token: 'FduQIZ67y6qGzVw6Fik6q7On4jWorm9UAAAAAgoNG5oAAAGei-4Fb-AsyCcGfplL',
-      saved_at: 0,
-    };
-  }
-
-  const now = Date.now();
-  const elapsed = (now - (token.saved_at || 0)) / 1000;
-
-  // 5시간(18000초) 이상 경과 시 갱신
-  if (elapsed > 18000) {
-    try {
-      const newData = await refreshAccessToken(token.refresh_token);
-      token.access_token = newData.access_token;
-      if (newData.refresh_token) {
-        token.refresh_token = newData.refresh_token;
-      }
-      token.saved_at = now;
-      saveToken(token);
-      console.log('토큰 갱신 완료');
-    } catch (e) {
-      console.log('토큰 갱신 실패, 기존 토큰 사용:', e.message);
-      // 갱신 실패해도 기존 토큰으로 계속 시도
-      token.saved_at = now;
-      saveToken(token);
-    }
-  }
-
-  return token.access_token;
-}
-
-// 카테고리 설정
 const CATEGORIES = [
   { code: '100100', label: '1.3㎥이상',  syear: '2020', eyear: '2026' },
   { code: '100101', label: '1.0㎥이상',  syear: '2023', eyear: '2026' },
@@ -95,11 +28,9 @@ const CONFIG = {
   url: 'https://www.4396200.com/sub8_1_s.html',
   limit: '70',
   region: '전남',
-  makers: { '104': '두산', '102': '현대', '101': '볼보' },
   recentDays: 7,
 };
 
-// 날짜 파싱
 function parseDate(str) {
   const [y, m, d] = str.trim().split('.');
   return new Date(2000 + parseInt(y), parseInt(m) - 1, parseInt(d));
@@ -109,7 +40,6 @@ function isRecent(dateStr, days) {
   return diff <= days;
 }
 
-// 페이지 수집
 async function fetchPage(cateCode, syear, eyear, page = 1) {
   const params = new URLSearchParams({
     cate_code: cateCode,
@@ -131,8 +61,7 @@ async function fetchPage(cateCode, syear, eyear, page = 1) {
   return res.data;
 }
 
-// HTML 파싱
-function parseItems(html, makerName, catLabel) {
+function parseItems(html, catLabel) {
   const $ = cheerio.load(html);
   const items = [];
   $('table tbody tr').each((_, row) => {
@@ -148,13 +77,11 @@ function parseItems(html, makerName, catLabel) {
     if (!model || !regDate) return;
     const yearMatch = yearRaw.match(/^(\d{2})/);
     const year = yearMatch ? 2000 + parseInt(yearMatch[1]) : 0;
-    const maker = makerCell || makerName;
-    items.push({ model, year, yearRaw, region, price, writer, regDate, maker, cat: catLabel });
+    items.push({ model, year, yearRaw, region, price, writer, regDate, maker: makerCell, cat: catLabel });
   });
   return items;
 }
 
-// 중복 제거
 function deduplicate(items) {
   const seen = new Set();
   return items.filter(item => {
@@ -165,9 +92,7 @@ function deduplicate(items) {
   });
 }
 
-// 카카오톡 발송 (토큰 자동 갱신 포함)
 async function postKakao(text) {
-  const KAKAO_TOKEN = await getValidToken();
   const template = JSON.stringify({
     object_type: 'text',
     text,
@@ -181,7 +106,6 @@ async function postKakao(text) {
   console.log('카카오톡 발송:', res.data);
 }
 
-// 카카오톡 일괄 발송
 async function sendKakao(items) {
   const now = new Date();
   const dateStr = `${now.getFullYear()-2000}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -207,17 +131,15 @@ async function sendKakao(items) {
     const chunkSize = 4;
     for (let i = 0; i < catItems.length; i += chunkSize) {
       const batch = catItems.slice(i, i + chunkSize);
-      const lines = [];
-      for (const item of batch) {
-        lines.push(`${item.maker} ${item.model}\n${item.year}년 / ${Number(item.price).toLocaleString()}만\n${item.writer} / ${item.regDate}`);
-      }
+      const lines = batch.map(item =>
+        `${item.maker} ${item.model}\n${item.year}년 / ${Number(item.price).toLocaleString()}만\n${item.writer} / ${item.regDate}`
+      );
       await postKakao(lines.join('\n\n'));
       await new Promise(r => setTimeout(r, 400));
     }
   }
 }
 
-// 메인
 async function main() {
   console.log('그린중기 매물 수집 시작...\n');
   let allItems = [];
@@ -226,7 +148,7 @@ async function main() {
     process.stdout.write(`  [${cat.label}] 수집 중..`);
     try {
       const html = await fetchPage(cat.code, cat.syear, cat.eyear, 1);
-      const items = parseItems(html, '', cat.label);
+      const items = parseItems(html, cat.label);
       allItems.push(...items);
       console.log(` ${items.length}건`);
     } catch (e) {
@@ -251,7 +173,7 @@ async function main() {
     return parseDate(b.regDate) - parseDate(a.regDate);
   });
 
-  console.log(`\n총 ${allItems.length}건 수집 / 최근 ${CONFIG.recentDays}일 ${recent.length}건 / 중복제거: ${deduped.length}건\n`);
+  console.log(`\n총 ${allItems.length}건 / 최근 ${CONFIG.recentDays}일 ${recent.length}건 / 중복제거: ${deduped.length}건\n`);
 
   if (deduped.length > 0) {
     let curCat = '', curMaker = '';
