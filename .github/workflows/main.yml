@@ -1,64 +1,25 @@
-name: 굴착기 매물 알림
+name: 그린중기 전남 매물 알림
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 22,23,0,1,2,3,4,5,6,7,8,9 * * *'
   workflow_dispatch:
 
 jobs:
-  check:
+  fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: 매물 확인 및 이메일 발송
-        run: |
-          python3 << 'EOF'
-          import urllib.request
-          import re
-          import smtplib
-          from email.mime.text import MIMEText
-          from datetime import datetime
+      - uses: actions/checkout@v3
 
-          today = datetime.now().strftime("%y.%m.%d")
+      - name: Node.js 설치
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
 
-          urls = [
-            "https://www.4396200.com/sub8_1.s.html?cate_code=100100",
-            "https://www.4396200.com/sub8_1.s.html?cate_code=100101",
-            "https://www.4396200.com/sub8_1.s.html?cate_code=100102",
-            "https://www.4396200.com/sub8_1.s.html?cate_code=100103",
-            "https://www.4396200.com/sub8_1.s.html?cate_code=100104",
-          ]
+      - name: 패키지 설치
+        run: npm install axios cheerio
 
-          results = []
-          for url in urls:
-            try:
-              req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-              html = urllib.request.urlopen(req).read().decode("euc-kr", errors="ignore")
-              rows = re.findall(r'<tr[^>]*>.*?</tr>', html, re.DOTALL)
-              for row in rows:
-                if today in row and "전남" in row:
-                  text = re.sub(r'<[^>]+>', ' ', row)
-                  text = re.sub(r'\s+', ' ', text).strip()
-                  if len(text) > 10:
-                    results.append(text)
-            except:
-              pass
-
-          results = list(dict.fromkeys(results))
-
-          if results:
-            body = f"[전남 굴착기 신규 매물 - {today}]\n\n"
-            body += "\n\n".join(results[:30])
-            body += "\n\n확인: https://www.4396200.com/sub8_1.s.html?cate_code=100100"
-
-            msg = MIMEText(body, 'plain', 'utf-8')
-            msg['Subject'] = f"[그린중기] 전남 굴착기 신규매물 {len(results)}건"
-            msg['From'] = "${{ secrets.GMAIL_USER }}"
-            msg['To'] = "${{ secrets.GMAIL_USER }}"
-
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
-              s.login("${{ secrets.GMAIL_USER }}", "${{ secrets.GMAIL_PASS }}")
-              s.send_message(msg)
-            print(f"알림 발송 완료: {len(results)}건")
-          else:
-            print(f"신규 매물 없음 ({today} 전남)")
-          EOF
+      - name: 매물 수집 및 카카오톡 발송
+        env:
+          KAKAO_ACCESS_TOKEN: ${{ secrets.KAKAO_ACCESS_TOKEN }}
+        run: node fetch_greenmachinery.js
