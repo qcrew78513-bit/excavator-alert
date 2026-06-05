@@ -2,17 +2,16 @@
  * 그린중기매매상사 굴착기 매물 자동 수집 및 카카오톡 발송
  * GitHub Actions 환경용 (환경변수로 토큰 관리)
  * ★ 리프레시 토큰으로 액세스 토큰을 매 실행마다 자동 갱신
+ * ★ 시각은 한국시각(KST)으로 표시
  */
 
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// 환경변수에서 토큰/키 읽기 (GitHub Actions Secrets)
 const REST_API_KEY    = process.env.REST_API_KEY || '2c0f1aa6acf2b9f2e2eb50fbeac8a0f6';
 const CLIENT_SECRET   = process.env.KAKAO_CLIENT_SECRET;
 const REFRESH_TOKEN   = process.env.KAKAO_REFRESH_TOKEN;
 
-// 액세스 토큰을 담을 변수 (실행 중 자동 갱신됨)
 let KAKAO_TOKEN = process.env.KAKAO_ACCESS_TOKEN;
 
 if (!REFRESH_TOKEN) {
@@ -20,7 +19,6 @@ if (!REFRESH_TOKEN) {
   process.exit(1);
 }
 
-// ★ 리프레시 토큰으로 새 액세스 토큰 발급
 async function refreshAccessToken() {
   try {
     const body = new URLSearchParams({
@@ -154,9 +152,9 @@ async function postKakao(text) {
 }
 
 async function sendKakao(items) {
-  const now = new Date();
-  const hour = now.getHours();
-  const dateStr = `${now.getFullYear()-2000}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const hour = now.getUTCHours();
+  const dateStr = `${now.getUTCFullYear()-2000}.${String(now.getUTCMonth()+1).padStart(2,'0')}.${String(now.getUTCDate()).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}`;
   const clock = clockEmoji(hour);
 
   if (items.length === 0) {
