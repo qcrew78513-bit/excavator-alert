@@ -1,27 +1,59 @@
 /**
  * 그린중기매매상사 굴착기 매물 자동 수집 및 카카오톡 발송
  * GitHub Actions 환경용 (환경변수로 토큰 관리)
+ * ★ 리프레시 토큰으로 액세스 토큰을 매 실행마다 자동 갱신
  */
 
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// 환경변수에서 토큰 읽기 (GitHub Actions Secrets)
-const KAKAO_TOKEN = process.env.KAKAO_ACCESS_TOKEN;
-const REST_API_KEY = process.env.REST_API_KEY || '2c0f1aa6acf2b9f2e2eb50fbeac8a0f6';
+// 환경변수에서 토큰/키 읽기 (GitHub Actions Secrets)
+const REST_API_KEY    = process.env.REST_API_KEY || '2c0f1aa6acf2b9f2e2eb50fbeac8a0f6';
+const CLIENT_SECRET   = process.env.KAKAO_CLIENT_SECRET;
+const REFRESH_TOKEN   = process.env.KAKAO_REFRESH_TOKEN;
 
-if (!KAKAO_TOKEN) {
-  console.error('KAKAO_ACCESS_TOKEN 환경변수가 없습니다.');
+// 액세스 토큰을 담을 변수 (실행 중 자동 갱신됨)
+let KAKAO_TOKEN = process.env.KAKAO_ACCESS_TOKEN;
+
+if (!REFRESH_TOKEN) {
+  console.error('KAKAO_REFRESH_TOKEN 환경변수가 없습니다.');
   process.exit(1);
 }
 
+// ★ 리프레시 토큰으로 새 액세스 토큰 발급
+async function refreshAccessToken() {
+  try {
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: REST_API_KEY,
+      refresh_token: REFRESH_TOKEN,
+    });
+    if (CLIENT_SECRET) body.append('client_secret', CLIENT_SECRET);
+
+    const res = await axios.post(
+      'https://kauth.kakao.com/oauth/token',
+      body.toString(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    KAKAO_TOKEN = res.data.access_token;
+    console.log('액세스 토큰 갱신 성공');
+    if (res.data.refresh_token) {
+      console.log('※ 새 리프레시 토큰이 발급되었습니다. GitHub Secret을 갱신하세요:');
+      console.log(res.data.refresh_token);
+    }
+  } catch (e) {
+    console.error('토큰 갱신 실패:', e.response ? e.response.data : e.message);
+    process.exit(1);
+  }
+}
+
 const CATEGORIES = [
-  { code: '100100', label: '1.3㎥이상',  syear: '2020', eyear: '2026' },
-  { code: '100101', label: '1.0㎥이상',  syear: '2023', eyear: '2026' },
-  { code: '100102', label: '0.4~0.9㎥', syear: '2018', eyear: '2026' },
-  { code: '100103', label: '0.3㎥이하',  syear: '2015', eyear: '2026' },
-  { code: '100104', label: '미니굴착기', syear: '2015', eyear: '2026' },
-  { code: '100105', label: '타이어식',   syear: '2015', eyear: '2026' },
+  { code: '100100', label: '1.3㎥이상',   syear: '2020', eyear: '2026' },
+  { code: '100101', label: '1.0㎥이상',   syear: '2023', eyear: '2026' },
+  { code: '100102', label: '0.4~0.9㎥',   syear: '2018', eyear: '2026' },
+  { code: '100103', label: '0.3㎥이하',   syear: '2015', eyear: '2026' },
+  { code: '100104', label: '미니굴착기',  syear: '2015', eyear: '2026' },
+  { code: '100105', label: '타이어식',    syear: '2015', eyear: '2026' },
 ];
 
 const CONFIG = {
@@ -35,6 +67,7 @@ function parseDate(str) {
   const [y, m, d] = str.trim().split('.');
   return new Date(2000 + parseInt(y), parseInt(m) - 1, parseInt(d));
 }
+
 function isRecent(dateStr, days) {
   const diff = (new Date() - parseDate(dateStr)) / (1000 * 60 * 60 * 24);
   return diff <= days;
@@ -68,12 +101,12 @@ function parseItems(html, catLabel) {
     const cells = $(row).find('td');
     if (cells.length < 10) return;
     const makerCell = $(cells[3]).text().trim();
-    const model   = $(cells[4]).text().trim();
-    const yearRaw = $(cells[5]).text().trim();
-    const region  = $(cells[7]).text().trim();
-    const price   = $(cells[8]).text().trim().replace(/[^0-9]/g, '');
-    const writer  = $(cells[9]).text().trim();
-    const regDate = $(cells[10]).text().trim();
+    const model     = $(cells[4]).text().trim();
+    const yearRaw   = $(cells[5]).text().trim();
+    const region    = $(cells[7]).text().trim();
+    const price     = $(cells[8]).text().trim().replace(/[^0-9]/g, '');
+    const writer    = $(cells[9]).text().trim();
+    const regDate   = $(cells[10]).text().trim();
     if (!model || !regDate) return;
     const yearMatch = yearRaw.match(/^(\d{2})/);
     const year = yearMatch ? 2000 + parseInt(yearMatch[1]) : 0;
@@ -92,6 +125,20 @@ function deduplicate(items) {
   });
 }
 
+function clockEmoji(hour) {
+  const clocks = ['🕛','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚'];
+  return clocks[hour % 12];
+}
+
+const CAT_EMOJI = {
+  '1.3㎥이상': '🟥',
+  '1.0㎥이상': '🟧',
+  '0.4~0.9㎥': '🟨',
+  '0.3㎥이하': '🟩',
+  '미니굴착기': '🟦',
+  '타이어식':   '🟪',
+};
+
 async function postKakao(text) {
   const template = JSON.stringify({
     object_type: 'text',
@@ -108,10 +155,12 @@ async function postKakao(text) {
 
 async function sendKakao(items) {
   const now = new Date();
-  const dateStr = `${now.getFullYear()-2000}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const hour = now.getHours();
+  const dateStr = `${now.getFullYear()-2000}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const clock = clockEmoji(hour);
 
   if (items.length === 0) {
-    await postKakao(`[그린중기 전남]\n${dateStr}\n\n조건에 맞는 매물이 없습니다.`);
+    await postKakao(`${clock} ${hour}시 ━━━━━━━━━\n[그린중기 전남]\n${dateStr}\n\n조건에 맞는 매물이 없습니다.`);
     return;
   }
 
@@ -121,18 +170,19 @@ async function sendKakao(items) {
     grouped[item.cat].push(item);
   }
 
-  await postKakao(`[그린중기 전남] ${dateStr}\n총 ${items.length}건`);
+  await postKakao(`${clock} ${hour}시 ━━━━━━━━━\n[그린중기 전남]\n${dateStr} · 총 ${items.length}건`);
   await new Promise(r => setTimeout(r, 400));
 
   for (const [cat, catItems] of Object.entries(grouped)) {
-    await postKakao(`━━ ${cat} (${catItems.length}건) ━━`);
+    const emoji = CAT_EMOJI[cat] || '▶';
+    await postKakao(`${emoji} ${cat} (${catItems.length}건)`);
     await new Promise(r => setTimeout(r, 400));
 
     const chunkSize = 4;
     for (let i = 0; i < catItems.length; i += chunkSize) {
       const batch = catItems.slice(i, i + chunkSize);
       const lines = batch.map(item =>
-        `${item.maker} ${item.model}\n${item.year}년 / ${Number(item.price).toLocaleString()}만\n${item.writer} / ${item.regDate}`
+        `${emoji} ${item.maker} ${item.model}\n${item.year}년 / ${Number(item.price).toLocaleString()}만\n${item.writer} / ${item.regDate}`
       );
       await postKakao(lines.join('\n\n'));
       await new Promise(r => setTimeout(r, 400));
@@ -141,6 +191,8 @@ async function sendKakao(items) {
 }
 
 async function main() {
+  await refreshAccessToken();
+
   console.log('그린중기 매물 수집 시작...\n');
   let allItems = [];
 
@@ -174,15 +226,6 @@ async function main() {
   });
 
   console.log(`\n총 ${allItems.length}건 / 최근 ${CONFIG.recentDays}일 ${recent.length}건 / 중복제거: ${deduped.length}건\n`);
-
-  if (deduped.length > 0) {
-    let curCat = '', curMaker = '';
-    deduped.forEach(item => {
-      if (item.cat !== curCat) { curCat = item.cat; console.log(`\n[${item.cat}]`); curMaker = ''; }
-      if (item.maker !== curMaker) { curMaker = item.maker; console.log(`  ── ${item.maker}`); }
-      console.log(`  ${item.model} ${item.year}년 ${item.price}만 ${item.region} ${item.regDate}`);
-    });
-  }
 
   console.log('\n카카오톡 발송 중...');
   await sendKakao(deduped);
