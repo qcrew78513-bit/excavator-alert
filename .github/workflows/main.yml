@@ -17,11 +17,125 @@ jobs:
           node-version: '20'
 
       - name: 패키지 설치
-        run: npm install axios cheerio
+        run: npm install axios cheerio tweetsodium
+
+      - name: 카카오 액세스 토큰 자동 갱신 및 Secret 업데이트
+        env:
+          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
+          REST_API_KEY: ${{ secrets.REST_API_KEY }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          node -e "
+          const https = require('https');
+          const sodium = require('tweetsodium');
+
+          const restApiKey = process.env.REST_API_KEY;
+          const refreshToken = process.env.KAKAO_REFRESH_TOKEN;
+          const clientSecret = process.env.KAKAO_CLIENT_SECRET;
+          const ghPat = process.env.GH_PAT;
+          const repo = process.env.GITHUB_REPOSITORY;
+
+          const body = new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: restApiKey,
+            refresh_token: refreshToken,
+            client_secret: clientSecret
+          }).toString();
+
+          const options = {
+            hostname: 'kauth.kakao.com',
+            path: '/oauth/token',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Length': Buffer.byteLength(body)
+            }
+          };
+
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', async () => {
+              const result = JSON.parse(data);
+              console.log('카카오 응답:', JSON.stringify(result));
+              if (!result.access_token) {
+                console.error('토큰 갱신 실패');
+                process.exit(1);
+              }
+              const newAccessToken = result.access_token;
+              const newRefreshToken = result.refresh_token;
+              console.log('새 액세스 토큰 발급 성공');
+
+              async function updateSecret(secretName, secretValue) {
+                return new Promise((resolve, reject) => {
+                  const keyOptions = {
+                    hostname: 'api.github.com',
+                    path: '/repos/' + repo + '/actions/secrets/public-key',
+                    method: 'GET',
+                    headers: {
+                      'Authorization': 'token ' + ghPat,
+                      'User-Agent': 'excavator-alert',
+                      'Accept': 'application/vnd.github.v3+json'
+                    }
+                  };
+                  const keyReq = https.request(keyOptions, (res) => {
+                    let keyData = '';
+                    res.on('data', c => keyData += c);
+                    res.on('end', () => {
+                      const keyInfo = JSON.parse(keyData);
+                      const key = Buffer.from(keyInfo.key, 'base64');
+                      const messageBytes = Buffer.from(secretValue);
+                      const encryptedBytes = sodium.seal(messageBytes, key);
+                      const encrypted = Buffer.from(encryptedBytes).toString('base64');
+                      const putBody = JSON.stringify({ encrypted_value: encrypted, key_id: keyInfo.key_id });
+                      const putOptions = {
+                        hostname: 'api.github.com',
+                        path: '/repos/' + repo + '/actions/secrets/' + secretName,
+                        method: 'PUT',
+                        headers: {
+                          'Authorization': 'token ' + ghPat,
+                          'User-Agent': 'excavator-alert',
+                          'Accept': 'application/vnd.github.v3+json',
+                          'Content-Type': 'application/json',
+                          'Content-Length': Buffer.byteLength(putBody)
+                        }
+                      };
+                      const putReq = https.request(putOptions, (res2) => {
+                        res2.on('data', () => {});
+                        res2.on('end', () => {
+                          console.log(secretName + ' 업데이트 완료 (HTTP ' + res2.statusCode + ')');
+                          resolve();
+                        });
+                      });
+                      putReq.on('error', reject);
+                      putReq.write(putBody);
+                      putReq.end();
+                    });
+                  });
+                  keyReq.on('error', reject);
+                  keyReq.end();
+                });
+              }
+
+              await updateSecret('KAKAO_ACCESS_TOKEN', newAccessToken);
+              if (newRefreshToken) {
+                await updateSecret('KAKAO_REFRESH_TOKEN', newRefreshToken);
+              }
+
+              const fs = require('fs');
+              fs.appendFileSync(process.env.GITHUB_ENV, 'NEW_ACCESS_TOKEN=' + newAccessToken + '\n');
+              console.log('모든 토큰 업데이트 완료');
+            });
+          });
+          req.on('error', (e) => { console.error(e); process.exit(1); });
+          req.write(body);
+          req.end();
+          "
 
       - name: 매물 수집 및 카카오톡 발송
         env:
-          KAKAO_ACCESS_TOKEN: ${{ secrets.KAKAO_ACCESS_TOKEN }}
+          KAKAO_ACCESS_TOKEN: ${{ env.NEW_ACCESS_TOKEN }}
           KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
           REST_API_KEY: ${{ secrets.REST_API_KEY }}
