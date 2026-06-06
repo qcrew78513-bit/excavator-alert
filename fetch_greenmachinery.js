@@ -1,9 +1,8 @@
-/**
- * 그린중기매매상사 전남 매물 수집 스크립트
- * - 카테고리별로 4396200.com에서 매물을 수집하고
- * - 최근 2일 이내 등록된 신규 매물을 필터링하여
- * - 중복 제거(모델+연식+가격+지역+등록인 기준, 최근 7일 내 동일 매물 1건만 유지)
- * - 카카오톡 나에게 보내기로 전송
+﻿/**
+ * 洹몃┛以묎린留ㅻℓ?곸궗 ?꾨궓 留ㅻЪ ?섏쭛 ?ㅽ겕由쏀듃
+ * - 移댄뀒怨좊━蹂꾨줈 4396200.com?먯꽌 留ㅻЪ???섏쭛?섍퀬
+ * - 理쒓렐 2???대궡 ?깅줉???좉퇋 留ㅻЪ???꾪꽣留곹븯?? * - 以묐났 ?쒓굅(紐⑤뜽+?곗떇+媛寃?吏???깅줉??湲곗?, 理쒓렐 7?????숈씪 留ㅻЪ 1嫄대쭔 ?좎?)
+ * - 移댁뭅?ㅽ넚 ?섏뿉寃?蹂대궡湲곕줈 ?꾩넚
  */
 
 const axios = require('axios');
@@ -11,18 +10,17 @@ const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
 
-// KAKAO_ACCESS_TOKEN (PowerShell) 또는 KAKAO_TOKEN (GitHub Actions) 둘 다 지원
-const ENV_TOKEN = process.env.KAKAO_ACCESS_TOKEN || process.env.KAKAO_TOKEN;
+// KAKAO_ACCESS_TOKEN (PowerShell) ?먮뒗 KAKAO_TOKEN (GitHub Actions) ????吏??const ENV_TOKEN = process.env.KAKAO_ACCESS_TOKEN || process.env.KAKAO_TOKEN;
 const TOKEN_FILE = path.join(__dirname, 'kakao_token.json');
 
-// 저장된 토큰 읽기
+// ??λ맂 ?좏겙 ?쎄린
 function loadToken() {
   try {
     if (fs.existsSync(TOKEN_FILE)) {
       const data = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
-      // 환경변수 토큰이 파일의 토큰과 다르면 환경변수 우선 (새로 발급한 경우)
+      // ?섍꼍蹂???좏겙???뚯씪???좏겙怨??ㅻⅤ硫??섍꼍蹂???곗꽑 (?덈줈 諛쒓툒??寃쎌슦)
       if (ENV_TOKEN && data.access_token !== ENV_TOKEN) {
-        console.log('환경변수 토큰이 파일 토큰과 다릅니다 - 환경변수 토큰으로 교체합니다.');
+        console.log('?섍꼍蹂???좏겙???뚯씪 ?좏겙怨??ㅻ쫭?덈떎 - ?섍꼍蹂???좏겙?쇰줈 援먯껜?⑸땲??');
         return { access_token: ENV_TOKEN, expires_at: 0 };
       }
       return data;
@@ -31,40 +29,38 @@ function loadToken() {
   return { access_token: ENV_TOKEN, expires_at: 0 };
 }
 
-// 토큰 저장
-function saveToken(access_token, expires_in) {
+// ?좏겙 ???function saveToken(access_token, expires_in) {
   const expires_at = Date.now() + (expires_in - 300) * 1000;
   fs.writeFileSync(TOKEN_FILE, JSON.stringify({ access_token, expires_at }), 'utf8');
-  console.log('토큰 저장 완료');
+  console.log('?좏겙 ????꾨즺');
 }
 
-// 토큰 가져오기
-async function getKakaoToken() {
+// ?좏겙 媛?몄삤湲?async function getKakaoToken() {
   const token = loadToken();
   if (!token.access_token) {
-    throw new Error('카카오 토큰이 없습니다. 환경변수 KAKAO_ACCESS_TOKEN을 설정해주세요.');
+    throw new Error('移댁뭅???좏겙???놁뒿?덈떎. ?섍꼍蹂??KAKAO_ACCESS_TOKEN???ㅼ젙?댁＜?몄슂.');
   }
   if (token.access_token && Date.now() < token.expires_at) {
     return token.access_token;
   }
-  console.log('토큰 유효시간 확인 - 현재 토큰으로 시도합니다.');
+  console.log('?좏겙 ?좏슚?쒓컙 ?뺤씤 - ?꾩옱 ?좏겙?쇰줈 ?쒕룄?⑸땲??');
   return token.access_token;
 }
 
 const CATEGORIES = [
-  { code: '100100', label: '1.3㎥이상',   syear: '2020', eyear: '2026' },
-  { code: '100101', label: '1.0㎥이상',   syear: '2023', eyear: '2026' },
-  { code: '100102', label: '0.4~0.9㎥',   syear: '2018', eyear: '2026' },
-  { code: '100103', label: '0.3㎥이하',   syear: '2015', eyear: '2026' },
-  { code: '100104', label: '미니굴착기',  syear: '2015', eyear: '2026' },
-  { code: '100105', label: '타이어식',    syear: '2015', eyear: '2026' },
+  { code: '100100', label: '1.3?μ씠??,   syear: '2020', eyear: '2026' },
+  { code: '100101', label: '1.0?μ씠??,   syear: '2023', eyear: '2026' },
+  { code: '100102', label: '0.4~0.9??,   syear: '2018', eyear: '2026' },
+  { code: '100103', label: '0.3?μ씠??,   syear: '2015', eyear: '2026' },
+  { code: '100104', label: '誘몃땲援댁갑湲?,  syear: '2015', eyear: '2026' },
+  { code: '100105', label: '??댁뼱??,    syear: '2015', eyear: '2026' },
 ];
 
 const CONFIG = {
   url: 'https://www.4396200.com/sub8_1_s.html',
   limit: '70',
-  region: '전남',
-  alertDays: 2,
+  region: '?꾨궓',
+  alertDays: 7,
   dedupDays: 7,
 };
 
@@ -161,21 +157,21 @@ async function postKakao(text) {
     { headers: { 'Authorization': `Bearer ${kakaoToken}`, 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
   saveToken(kakaoToken, 21600);
-  console.log('카카오 발송 결과:', res.data);
+  console.log('移댁뭅??諛쒖넚 寃곌낵:', res.data);
 }
 
 function clockEmoji(hour) {
-  const clocks = ['🕛','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚'];
+  const clocks = ['?븲','?븧','?븨','?븩','?븪','?븫','?븬','?븭','?븮','?븯','?븰','?븱'];
   return clocks[hour % 12];
 }
 
 const CAT_EMOJI = {
-  '1.3㎥이상': '🟥',
-  '1.0㎥이상': '🟧',
-  '0.4~0.9㎥': '🟨',
-  '0.3㎥이하': '🟩',
-  '미니굴착기': '🟦',
-  '타이어식':   '🟪',
+  '1.3?μ씠??: '?윥',
+  '1.0?μ씠??: '?윧',
+  '0.4~0.9??: '?윩',
+  '0.3?μ씠??: '?윪',
+  '誘몃땲援댁갑湲?: '?윦',
+  '??댁뼱??:   '?윫',
 };
 
 async function sendKakao(items) {
@@ -185,7 +181,7 @@ async function sendKakao(items) {
   const clock = clockEmoji(hour);
 
   if (items.length === 0) {
-    await postKakao(`${clock} ${hour}시 ━━━━━━━━━\n[그린중기 전남 매물]\n\n신규 매물 없음  ${dateStr}\n\n(기준 / 최근 ${CONFIG.alertDays}일 이내 / 신규 등록)`);
+    await postKakao(`${clock} ${hour}???곣봺?곣봺?곣봺?곣봺??n[洹몃┛以묎린 ?꾨궓 留ㅻЪ]\n\n?좉퇋 留ㅻЪ ?놁쓬  ${dateStr}\n\n(湲곗? / 理쒓렐 ${CONFIG.alertDays}???대궡 / ?좉퇋 ?깅줉)`);
     return;
   }
 
@@ -195,19 +191,19 @@ async function sendKakao(items) {
     grouped[item.cat].push(item);
   }
 
-  await postKakao(`${clock} ${hour}시 ━━━━━━━━━\n[그린중기 전남 매물]\n${dateStr} · 총 ${items.length}건`);
+  await postKakao(`${clock} ${hour}???곣봺?곣봺?곣봺?곣봺??n[洹몃┛以묎린 ?꾨궓 留ㅻЪ]\n${dateStr} 쨌 珥?${items.length}嫄?);
   await new Promise(r => setTimeout(r, 400));
 
   for (const [cat, catItems] of Object.entries(grouped)) {
-    const emoji = CAT_EMOJI[cat] || '▶';
-    await postKakao(`${emoji} ${cat} (${catItems.length}건)`);
+    const emoji = CAT_EMOJI[cat] || '??;
+    await postKakao(`${emoji} ${cat} (${catItems.length}嫄?`);
     await new Promise(r => setTimeout(r, 400));
 
     const chunkSize = 4;
     for (let i = 0; i < catItems.length; i += chunkSize) {
       const batch = catItems.slice(i, i + chunkSize);
       const lines = batch.map(item =>
-        `${emoji} ${item.maker} ${item.model}\n${item.year}년 / ${Number(item.price).toLocaleString()}만\n${item.writer} / ${item.regDate}`
+        `${emoji} ${item.maker} ${item.model}\n${item.year}??/ ${Number(item.price).toLocaleString()}留?n${item.writer} / ${item.regDate}`
       );
       await postKakao(lines.join('\n\n'));
       await new Promise(r => setTimeout(r, 400));
@@ -216,18 +212,18 @@ async function sendKakao(items) {
 }
 
 async function main() {
-  console.log('그린중기 전남 매물 수집 시작...');
+  console.log('洹몃┛以묎린 ?꾨궓 留ㅻЪ ?섏쭛 ?쒖옉...');
   let allItems = [];
 
   for (const cat of CATEGORIES) {
-    process.stdout.write(`  [${cat.label}] 수집 중.. `);
+    process.stdout.write(`  [${cat.label}] ?섏쭛 以?. `);
     try {
       const html = await fetchPage(cat.code, cat.syear, cat.eyear, 1);
       const items = parseItems(html, cat.label);
       allItems.push(...items);
-      console.log(` ${items.length}건`);
+      console.log(` ${items.length}嫄?);
     } catch (e) {
-      console.log(` 오류 : ${e.message}`);
+      console.log(` ?ㅻ쪟 : ${e.message}`);
     }
     await new Promise(r => setTimeout(r, 500));
   }
@@ -241,19 +237,19 @@ async function main() {
     return parseDate(b.regDate) - parseDate(a.regDate);
   });
 
-  console.log(`\n전체 수집 : ${allItems.length}건 → 최종 알림 대상 : ${filtered.length}건\n`);
+  console.log(`\n?꾩껜 ?섏쭛 : ${allItems.length}嫄???理쒖쥌 ?뚮┝ ???: ${filtered.length}嫄?n`);
 
   if (filtered.length > 0) {
     let curCat = '';
     filtered.forEach(item => {
       if (item.cat !== curCat) { curCat = item.cat; console.log(`\n[${item.cat}]`); }
-      console.log(`  ${item.maker} ${item.model} ${item.year}년 ${item.price}만 ${item.region} ${item.regDate}`);
+      console.log(`  ${item.maker} ${item.model} ${item.year}??${item.price}留?${item.region} ${item.regDate}`);
     });
   }
 
-  console.log('\n카카오톡 발송 시작...');
+  console.log('\n移댁뭅?ㅽ넚 諛쒖넚 ?쒖옉...');
   await sendKakao(filtered);
-  console.log('완료.');
+  console.log('?꾨즺.');
 }
 
 main().catch(console.error);
