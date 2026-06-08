@@ -1,3 +1,4 @@
+ï»¿process.stdout.setEncoding("utf8");
 const axios = require('axios');
 const cheerio = require('cheerio');
 const fs = require('fs');
@@ -27,24 +28,24 @@ function saveToken(access_token, expires_in) {
 async function getKakaoToken() {
   const token = loadToken();
   if (!token.access_token) {
-    throw new Error('KAKAO_ACCESS_TOKEN ¾øÀ½');
+    throw new Error('KAKAO_ACCESS_TOKEN ï¿½ï¿½ï¿½ï¿½');
   }
   return token.access_token;
 }
 
 const CATEGORIES = [
-  { code: '100100', label: '1.3mÀÌ»ó', syear: '2020', eyear: '2026' },
-  { code: '100101', label: '1.0mÀÌ»ó', syear: '2023', eyear: '2026' },
+  { code: '100100', label: '1.3mï¿½Ì»ï¿½', syear: '2020', eyear: '2026' },
+  { code: '100101', label: '1.0mï¿½Ì»ï¿½', syear: '2023', eyear: '2026' },
   { code: '100102', label: '0.4~0.9m', syear: '2018', eyear: '2026' },
-  { code: '100103', label: '0.3mÀÌÇÏ', syear: '2015', eyear: '2026' },
-  { code: '100104', label: '¹Ì´Ï±¼Âø±â', syear: '2015', eyear: '2026' },
-  { code: '100105', label: 'Å¸ÀÌ¾î½Ä', syear: '2015', eyear: '2026' },
+  { code: '100103', label: '0.3mï¿½ï¿½ï¿½ï¿½', syear: '2015', eyear: '2026' },
+  { code: '100104', label: 'ï¿½Ì´Ï±ï¿½ï¿½ï¿½ï¿½ï¿½', syear: '2015', eyear: '2026' },
+  { code: '100105', label: 'Å¸ï¿½Ì¾ï¿½ï¿½', syear: '2015', eyear: '2026' },
 ];
 
 const CONFIG = {
   url: 'https://www.4396200.com/sub8_1_s.html',
   limit: '70',
-  region: 'Àü³²',
+  region: 'ï¿½ï¿½ï¿½ï¿½',
   alertDays: 7,
   dedupDays: 7,
 };
@@ -122,7 +123,7 @@ async function postKakao(text) {
     { headers: { 'Authorization': `Bearer ${kakaoToken}`, 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
   saveToken(kakaoToken, 21600);
-  console.log('Ä«Ä«¿À ¹ß¼Û:', res.data);
+  console.log('Ä«Ä«ï¿½ï¿½ ï¿½ß¼ï¿½:', res.data);
 }
 
 async function sendKakao(items) {
@@ -131,7 +132,7 @@ async function sendKakao(items) {
   const dateStr = `${now.getFullYear()-2000}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
   if (items.length === 0) {
-    await postKakao(`[±×¸°Áß±â Àü³² ¸Å¹°]\n\n½Å±Ô ¸Å¹° ¾øÀ½  ${dateStr}\n\n(ÃÖ±Ù ${CONFIG.alertDays}ÀÏ ÀÌ³» / ½Å±Ô µî·Ï)`);
+    await postKakao(`[ï¿½×¸ï¿½ï¿½ß±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Å¹ï¿½]\n\nï¿½Å±ï¿½ ï¿½Å¹ï¿½ ï¿½ï¿½ï¿½ï¿½  ${dateStr}\n\n(ï¿½Ö±ï¿½ ${CONFIG.alertDays}ï¿½ï¿½ ï¿½Ì³ï¿½ / ï¿½Å±ï¿½ ï¿½ï¿½ï¿½)`);
     return;
   }
 
@@ -141,17 +142,17 @@ async function sendKakao(items) {
     grouped[item.cat].push(item);
   }
 
-  await postKakao(`[±×¸°Áß±â Àü³² ¸Å¹°]\n${dateStr} ÃÑ ${items.length}°Ç`);
+  await postKakao(`[ï¿½×¸ï¿½ï¿½ß±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Å¹ï¿½]\n${dateStr} ï¿½ï¿½ ${items.length}ï¿½ï¿½`);
   await new Promise(r => setTimeout(r, 400));
 
   for (const [cat, catItems] of Object.entries(grouped)) {
-    await postKakao(`[${cat}] ${catItems.length}°Ç`);
+    await postKakao(`[${cat}] ${catItems.length}ï¿½ï¿½`);
     await new Promise(r => setTimeout(r, 400));
     const chunkSize = 4;
     for (let i = 0; i < catItems.length; i += chunkSize) {
       const batch = catItems.slice(i, i + chunkSize);
       const lines = batch.map(item =>
-        `${item.maker} ${item.model}\n${item.year}³â / ${Number(item.price).toLocaleString()}¸¸\n${item.writer} / ${item.regDate}`
+        `${item.maker} ${item.model}\n${item.year}ï¿½ï¿½ / ${Number(item.price).toLocaleString()}ï¿½ï¿½\n${item.writer} / ${item.regDate}`
       );
       await postKakao(lines.join('\n\n'));
       await new Promise(r => setTimeout(r, 400));
@@ -160,16 +161,16 @@ async function sendKakao(items) {
 }
 
 async function main() {
-  console.log('±×¸°Áß±â Àü³² ¸Å¹° ¼öÁý ½ÃÀÛ...');
+  console.log('ï¿½×¸ï¿½ï¿½ß±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Å¹ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½...');
   let allItems = [];
   for (const cat of CATEGORIES) {
     try {
       const html = await fetchPage(cat.code, cat.syear, cat.eyear, 1);
       const items = parseItems(html, cat.label);
       allItems.push(...items);
-      console.log(`[${cat.label}] ${items.length}°Ç`);
+      console.log(`[${cat.label}] ${items.length}ï¿½ï¿½`);
     } catch (e) {
-      console.log(`[${cat.label}] ¿À·ù: ${e.message}`);
+      console.log(`[${cat.label}] ï¿½ï¿½ï¿½ï¿½: ${e.message}`);
     }
     await new Promise(r => setTimeout(r, 500));
   }
@@ -180,9 +181,9 @@ async function main() {
   });
   const deduped = deduplicate(recent);
 
-  console.log(`\nÀüÃ¼ ${allItems.length}°Ç / ÃÖ±Ù ${CONFIG.alertDays}ÀÏ ${recent.length}°Ç / Áßº¹Á¦°Å ${deduped.length}°Ç`);
+  console.log(`\nï¿½ï¿½Ã¼ ${allItems.length}ï¿½ï¿½ / ï¿½Ö±ï¿½ ${CONFIG.alertDays}ï¿½ï¿½ ${recent.length}ï¿½ï¿½ / ï¿½ßºï¿½ï¿½ï¿½ï¿½ï¿½ ${deduped.length}ï¿½ï¿½`);
   await sendKakao(deduped);
-  console.log('¿Ï·á.');
+  console.log('ï¿½Ï·ï¿½.');
 }
 
 main().catch(console.error);
