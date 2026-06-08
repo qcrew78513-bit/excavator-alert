@@ -28,24 +28,24 @@ function saveToken(access_token, expires_in) {
 async function getKakaoToken() {
   const token = loadToken();
   if (!token.access_token) {
-    throw new Error('KAKAO_ACCESS_TOKEN ����');
+    throw new Error('KAKAO_ACCESS_TOKEN 없음');
   }
   return token.access_token;
 }
 
 const CATEGORIES = [
-  { code: '100100', label: '1.3m�̻�', syear: '2020', eyear: '2026' },
-  { code: '100101', label: '1.0m�̻�', syear: '2023', eyear: '2026' },
+  { code: '100100', label: '1.3m이상', syear: '2020', eyear: '2026' },
+  { code: '100101', label: '1.0m이상', syear: '2023', eyear: '2026' },
   { code: '100102', label: '0.4~0.9m', syear: '2018', eyear: '2026' },
-  { code: '100103', label: '0.3m����', syear: '2015', eyear: '2026' },
-  { code: '100104', label: '�̴ϱ�����', syear: '2015', eyear: '2026' },
-  { code: '100105', label: 'Ÿ�̾��', syear: '2015', eyear: '2026' },
+  { code: '100103', label: '0.3m이하', syear: '2015', eyear: '2026' },
+  { code: '100104', label: '미니굴착기', syear: '2015', eyear: '2026' },
+  { code: '100105', label: '타이어식', syear: '2015', eyear: '2026' },
 ];
 
 const CONFIG = {
   url: 'https://www.4396200.com/sub8_1_s.html',
   limit: '70',
-  region: '����',
+  region: '전남',
   alertDays: 7,
   dedupDays: 7,
 };
@@ -100,6 +100,7 @@ function parseItems(html, catLabel) {
 }
 
 function deduplicate(items) {
+function deduplicate(items) {
   const countMap = new Map();
   for (const item of items) {
     const key = `${item.maker}-${item.model}-${item.yearRaw}-${item.price}-${item.region}-${item.writer}`;
@@ -113,17 +114,11 @@ function deduplicate(items) {
     return countMap.get(key) < 3;
   });
 }
-
-async function postKakao(text) {
-  const kakaoToken = await getKakaoToken();
-  const template = JSON.stringify({ object_type: 'text', text, link: { web_url: 'https://www.4396200.com' } });
-  const res = await axios.post(
-    'https://kapi.kakao.com/v2/api/talk/memo/default/send',
     new URLSearchParams({ template_object: template }).toString(),
     { headers: { 'Authorization': `Bearer ${kakaoToken}`, 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
   saveToken(kakaoToken, 21600);
-  console.log('īī�� �߼�:', res.data);
+  console.log('카카오 발송:', res.data);
 }
 
 async function sendKakao(items) {
@@ -132,7 +127,7 @@ async function sendKakao(items) {
   const dateStr = `${now.getFullYear()-2000}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
   if (items.length === 0) {
-    await postKakao(`[�׸��߱� ���� �Ź�]\n\n�ű� �Ź� ����  ${dateStr}\n\n(�ֱ� ${CONFIG.alertDays}�� �̳� / �ű� ���)`);
+    await postKakao(`[그린중기 전남 매물]\n\n신규 매물 없음  ${dateStr}\n\n(최근 ${CONFIG.alertDays}일 이내 / 신규 등록)`);
     return;
   }
 
@@ -142,17 +137,17 @@ async function sendKakao(items) {
     grouped[item.cat].push(item);
   }
 
-  await postKakao(`[�׸��߱� ���� �Ź�]\n${dateStr} �� ${items.length}��`);
+  await postKakao(`[그린중기 전남 매물]\n${dateStr} 총 ${items.length}건`);
   await new Promise(r => setTimeout(r, 400));
 
   for (const [cat, catItems] of Object.entries(grouped)) {
-    await postKakao(`[${cat}] ${catItems.length}��`);
+    await postKakao(`[${cat}] ${catItems.length}건`);
     await new Promise(r => setTimeout(r, 400));
     const chunkSize = 4;
     for (let i = 0; i < catItems.length; i += chunkSize) {
       const batch = catItems.slice(i, i + chunkSize);
       const lines = batch.map(item =>
-        `${item.maker} ${item.model}\n${item.year}�� / ${Number(item.price).toLocaleString()}��\n${item.writer} / ${item.regDate}`
+        `${item.maker} ${item.model}\n${item.year}년 / ${Number(item.price).toLocaleString()}만\n${item.writer} / ${item.regDate}`
       );
       await postKakao(lines.join('\n\n'));
       await new Promise(r => setTimeout(r, 400));
@@ -161,16 +156,16 @@ async function sendKakao(items) {
 }
 
 async function main() {
-  console.log('�׸��߱� ���� �Ź� ���� ����...');
+  console.log('그린중기 전남 매물 수집 시작...');
   let allItems = [];
   for (const cat of CATEGORIES) {
     try {
       const html = await fetchPage(cat.code, cat.syear, cat.eyear, 1);
       const items = parseItems(html, cat.label);
       allItems.push(...items);
-      console.log(`[${cat.label}] ${items.length}��`);
+      console.log(`[${cat.label}] ${items.length}건`);
     } catch (e) {
-      console.log(`[${cat.label}] ����: ${e.message}`);
+      console.log(`[${cat.label}] 오류: ${e.message}`);
     }
     await new Promise(r => setTimeout(r, 500));
   }
@@ -181,9 +176,9 @@ async function main() {
   });
   const deduped = deduplicate(recent);
 
-  console.log(`\n��ü ${allItems.length}�� / �ֱ� ${CONFIG.alertDays}�� ${recent.length}�� / �ߺ����� ${deduped.length}��`);
+  console.log(`\n전체 ${allItems.length}건 / 최근 ${CONFIG.alertDays}일 ${recent.length}건 / 중복제거 ${deduped.length}건`);
   await sendKakao(deduped);
-  console.log('�Ϸ�.');
+  console.log('완료.');
 }
 
 main().catch(console.error);
