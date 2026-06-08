@@ -113,6 +113,12 @@ function deduplicate(items) {
     return countMap.get(key) < 3;
   });
 }
+
+async function postKakao(text) {
+  const kakaoToken = await getKakaoToken();
+  const template = JSON.stringify({ object_type: 'text', text, link: { web_url: 'https://www.4396200.com' } });
+  const res = await axios.post(
+    'https://kapi.kakao.com/v2/api/talk/memo/default/send',
     new URLSearchParams({ template_object: template }).toString(),
     { headers: { 'Authorization': `Bearer ${kakaoToken}`, 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
