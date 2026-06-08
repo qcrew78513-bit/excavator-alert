@@ -100,7 +100,6 @@ function parseItems(html, catLabel) {
 }
 
 function deduplicate(items) {
-function deduplicate(items) {
   const countMap = new Map();
   for (const item of items) {
     const key = `${item.maker}-${item.model}-${item.yearRaw}-${item.price}-${item.region}-${item.writer}`;
