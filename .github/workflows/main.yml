@@ -1,4 +1,4 @@
-﻿name: 洹몃┛以묎린 ?꾨궓 留ㅻЪ ?뚮┝
+﻿name: 그린중기 전남 매물 알림
 
 on:
   schedule:
@@ -11,17 +11,17 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Node.js ?ㅼ튂
+      - name: Node.js 설치
         uses: actions/setup-node@v3
         with:
           node-version: '20'
 
-      - name: ?⑦궎吏 ?ㅼ튂
+      - name: 패키지 설치
         run: npm install axios cheerio
 
-      - name: 留ㅻЪ ?섏쭛 諛?移댁뭅?ㅽ넚 諛쒖넚
+      - name: 매물 수집 및 카카오톡 발송
         env:
           KAKAO_ACCESS_TOKEN: ${{ secrets.KAKAO_ACCESS_TOKEN }}
           REST_API_KEY: ${{ secrets.REST_API_KEY }}
-            LANG: en_US.UTF-8
-      run: node fetch_greenmachinery.js
+          LANG: en_US.UTF-8
+        run: node fetch_greenmachinery.js
