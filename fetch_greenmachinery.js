@@ -46,7 +46,7 @@ const CONFIG = {
   url: 'https://www.4396200.com/sub8_1_s.html',
   limit: '70',
   region: '전남',
-  alertDays: 7,
+  alertDays: 2,
   dedupDays: 7,
 };
 
@@ -187,3 +187,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
